@@ -1,0 +1,55 @@
+name: lab2-arhitecture
+
+services:
+  postgres-service:
+    container_name: postgres-container
+    image: postgres:17-alpine
+    environment:
+      - POSTGRES_DB=lab1_db
+      - POSTGRES_USER=django
+      - POSTGRES_PASSWORD=1234567890
+    ports:
+    - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U django -d lab1_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend-service:
+    container_name: backend-container
+    build:
+      context: ./backend
+      dockerfile: dockerfile
+    working_dir: /backend
+    volumes:
+      - static_volume:/backend/static
+    expose:
+      - 8000
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             python manage.py makemigrations &&
+             python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000 --verbosity 3"
+    depends_on:
+      postgres-service:
+        condition: service_healthy
+
+  nginx-service:
+    container_name: nginx-container
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - 80:80
+    volumes:
+      - static_volume:/static
+    depends_on:
+      - backend-service
+
+volumes:
+  postgres_data:
+  static_volume:
